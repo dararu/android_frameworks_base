@@ -1972,6 +1972,11 @@ public final class Settings {
         public static final String NEXT_ALARM_FORMATTED = "next_alarm_formatted";
 
         /**
+         * @hide
+         */
+        public static final String SHOW_ALARM_ICON = "show_alarm_icon";
+
+        /**
          * Scaling factor for fonts, float.
          */
         public static final String FONT_SCALE = "font_scale";
@@ -2182,6 +2187,13 @@ public final class Settings {
          * @hide
          */
         public static final String VOLUME_MASTER_MUTE = "volume_master_mute";
+
+        /**
+         * Whether to wake the screen with the volume keys, the value is boolean.
+         *
+         * @hide
+         */
+        public static final String VOLUME_WAKE_SCREEN = "volume_wake_screen";
 
         /**
          * Microphone mute (int 1 = mute, 0 = not muted).
@@ -2527,6 +2539,12 @@ public final class Settings {
          * @hide
          */
         public static final String USE_EDGE_SERVICE_FOR_GESTURES = "edge_service_for_gestures";
+
+        /**
+         * Show the pending notification counts as overlays on the status bar
+         * @hide
+         */
+        public static final String STATUS_BAR_NOTIF_COUNT = "status_bar_notif_count";
 
         /**
          * Control whether the accelerometer will be used to change screen
@@ -3039,6 +3057,12 @@ public final class Settings {
          * @hide
          */
         public static final String KEY_APP_SWITCH_LONG_PRESS_ACTION = "key_app_switch_long_press_action";
+
+        /**
+         * Whether to wake the screen with the home key, the value is boolean.
+         * @hide
+         */
+        public static final String HOME_WAKE_SCREEN = "home_wake_screen";
 
         /**
          * Whether the phone ringtone should be played in an increasing manner
@@ -5162,6 +5186,36 @@ public final class Settings {
         public static final String DOZE_ENABLED = "doze_enabled";
 
         /**
+         * What happens when the user presses the Home button when the
+         * phone is ringing.<br/>
+         * <b>Values:</b><br/>
+         * 1 - Nothing happens. (Default behavior)<br/>
+         * 2 - The Home button answer the current call.<br/>
+         *
+         * @hide
+         */
+        public static final String RING_HOME_BUTTON_BEHAVIOR = "ring_home_button_behavior";
+
+        /**
+         * RING_HOME_BUTTON_BEHAVIOR value for "do nothing".
+         * @hide
+         */
+        public static final int RING_HOME_BUTTON_BEHAVIOR_DO_NOTHING = 0x1;
+
+        /**
+         * RING_HOME_BUTTON_BEHAVIOR value for "answer".
+         * @hide
+         */
+        public static final int RING_HOME_BUTTON_BEHAVIOR_ANSWER = 0x2;
+
+        /**
+         * RING_HOME_BUTTON_BEHAVIOR default value.
+         * @hide
+         */
+        public static final int RING_HOME_BUTTON_BEHAVIOR_DEFAULT =
+                RING_HOME_BUTTON_BEHAVIOR_DO_NOTHING;
+
+        /**
          * The current night mode that has been selected by the user.  Owned
          * and controlled by UiModeManagerService.  Constants are as per
          * UiModeManager.
@@ -5341,6 +5395,14 @@ public final class Settings {
         public static final String ADVANCED_REBOOT = "advanced_reboot";
 
         /**
+         * Whether to display a menu containing 'Wipe data', 'Force close' and other options
+         * in the notification area and in the recent app list
+         * @hide
+         */
+        public static final String DEVELOPMENT_SHORTCUT = "development_shortcut";
+
+
+        /**
          * This are the settings to be backed up.
          *
          * NOTE: Settings are backed up and restored in the order they appear
@@ -5392,7 +5454,8 @@ public final class Settings {
             UI_NIGHT_MODE,
             SLEEP_TIMEOUT,
             PRIVACY_GUARD_DEFAULT,
-            ADVANCED_REBOOT
+            ADVANCED_REBOOT,
+            DEVELOPMENT_SHORTCUT
         };
 
         /**
@@ -5764,6 +5827,13 @@ public final class Settings {
          * @hide
          */
         public static final String BUGREPORT_IN_POWER_MENU = "bugreport_in_power_menu";
+
+        /**
+         * Whether to wake the display when plugging or unplugging the charger
+         *
+         * @hide
+         */
+        public static final String WAKE_WHEN_PLUGGED_OR_UNPLUGGED = "wake_when_plugged_or_unplugged";
 
         /**
          * Whether ADB is enabled.
@@ -7131,6 +7201,7 @@ public final class Settings {
         public static final String[] SETTINGS_TO_BACKUP = {
             BUGREPORT_IN_POWER_MENU,
             STAY_ON_WHILE_PLUGGED_IN,
+            WAKE_WHEN_PLUGGED_OR_UNPLUGGED,
             AUTO_TIME,
             AUTO_TIME_ZONE,
             POWER_SOUNDS_ENABLED,

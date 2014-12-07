@@ -394,6 +394,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     boolean mTranslucentDecorEnabled = true;
     int mBackKillTimeout;
 
+    // Behavior of home wake
+    boolean mHomeWakeScreen;
+
     int mDeviceHardwareKeys;
 
     int mPointerLocationMode = 0; // guarded by mLock
@@ -402,6 +405,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // The last window we were told about in focusChanged.
     WindowState mFocusedWindow;
     IApplicationToken mFocusedApp;
+
+    // Volume wake control flag
+    boolean mVolumeWakeScreen;
 
     PointerLocationView mPointerLocationView;
 
@@ -537,6 +543,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // (See Settings.Secure.INCALL_POWER_BUTTON_BEHAVIOR.)
     int mIncallPowerBehavior;
 
+    // Behavior of HOME button during incomming call ring.
+    // (See Settings.Secure.RING_HOME_BUTTON_BEHAVIOR.)
+    int mRingHomeBehavior;
+
     Display mDisplay;
 
     int mLandscapeRotation = 0;  // default landscape rotation
@@ -668,6 +678,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     Settings.Secure.INCALL_POWER_BUTTON_BEHAVIOR), false, this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.Secure.getUriFor(
+                    Settings.Secure.RING_HOME_BUTTON_BEHAVIOR), false, this,
+                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.Secure.getUriFor(
                     Settings.Secure.WAKE_GESTURE_ENABLED), false, this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
@@ -721,7 +734,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.DEV_FORCE_SHOW_NAVBAR), false, this,
                     UserHandle.USER_ALL);
-
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.HOME_WAKE_SCREEN), false, this,
+                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.VOLUME_WAKE_SCREEN), false, this,
+                    UserHandle.USER_ALL);
             updateSettings();
         }
 
@@ -1600,6 +1618,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     Settings.Secure.INCALL_POWER_BUTTON_BEHAVIOR,
                     Settings.Secure.INCALL_POWER_BUTTON_BEHAVIOR_DEFAULT,
                     UserHandle.USER_CURRENT);
+            mRingHomeBehavior = Settings.Secure.getIntForUser(resolver,
+                    Settings.Secure.RING_HOME_BUTTON_BEHAVIOR,
+                    Settings.Secure.RING_HOME_BUTTON_BEHAVIOR_DEFAULT,
+                    UserHandle.USER_CURRENT);
+            mHomeWakeScreen = (Settings.System.getIntForUser(resolver,
+                    Settings.System.HOME_WAKE_SCREEN, 1, UserHandle.USER_CURRENT) == 1);
 
             // Configure wake gesture.
             boolean wakeGestureEnabledSetting = Settings.Secure.getIntForUser(resolver,
@@ -1671,6 +1695,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             if (mImmersiveModeConfirmation != null) {
                 mImmersiveModeConfirmation.loadSetting(mCurrentUserId);
             }
+
+            // Volume wake
+            mVolumeWakeScreen = (Settings.System.getIntForUser(resolver,
+                    Settings.System.VOLUME_WAKE_SCREEN, 0, UserHandle.USER_CURRENT) == 1);
+
             PolicyControl.reloadFromSetting(mContext);
         }
         if (updateRotation) {
@@ -2604,8 +2633,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 // and his ONLY options are to answer or reject the call.)
                 TelecomManager telecomManager = getTelecommService();
                 if (telecomManager != null && telecomManager.isRinging()) {
-                    Log.i(TAG, "Ignoring HOME; there's a ringing incoming call.");
-                    return -1;
+                    if ((mRingHomeBehavior
+                            & Settings.Secure.RING_HOME_BUTTON_BEHAVIOR_ANSWER) != 0) {
+                        Log.i(TAG, "Answering with HOME button.");
+                        telecomManager.acceptRingingCall();
+                        return -1;
+                    } else {
+                        Log.i(TAG, "Ignoring HOME; there's a ringing incoming call.");
+                        return -1;
+                    }
                 }
 
                 // Delay handling home if a double-tap is possible.
@@ -4926,6 +4962,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 break;
             }
 
+            case KeyEvent.KEYCODE_HOME:
+                if (down && !interactive && mHomeWakeScreen) {
+                    isWakeKey = true;
+                }
+                break;
+
             case KeyEvent.KEYCODE_ENDCALL: {
                 result &= ~ACTION_PASS_TO_USER;
                 if (down) {
@@ -5108,7 +5150,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             case KeyEvent.KEYCODE_VOLUME_UP:
             case KeyEvent.KEYCODE_VOLUME_DOWN:
             case KeyEvent.KEYCODE_VOLUME_MUTE:
-                return mDockMode != Intent.EXTRA_DOCK_STATE_UNDOCKED;
+                return mVolumeWakeScreen || mDockMode != Intent.EXTRA_DOCK_STATE_UNDOCKED;
 
             // ignore media and camera keys
             case KeyEvent.KEYCODE_MUTE:
@@ -5309,6 +5351,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     };
 
+    private void disableQbCharger() {
+        if (SystemProperties.getInt("sys.quickboot.enable", 0) == 1) {
+            SystemProperties.set("sys.qbcharger.enable", "false");
+        }
+    }
+
     // Called on the PowerManager's Notifier thread.
     @Override
     public void goingToSleep(int why) {
@@ -5335,6 +5383,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     public void wakingUp() {
         EventLog.writeEvent(70000, 1);
         if (DEBUG_WAKEUP) Slog.i(TAG, "Waking up...");
+
+        // To disable qbcharger process when screen turning on
+        disableQbCharger();
 
         // Since goToSleep performs these functions synchronously, we must
         // do the same here.  We cannot post this work to a handler because
@@ -6660,6 +6711,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 pw.print(" mLockScreenTimerActive="); pw.println(mLockScreenTimerActive);
         pw.print(prefix); pw.print("mEndcallBehavior="); pw.print(mEndcallBehavior);
                 pw.print(" mIncallPowerBehavior="); pw.print(mIncallPowerBehavior);
+                pw.print(" mRingHomeBehavior="); pw.print(mRingHomeBehavior);
                 pw.print(" mLongPressOnHomeBehavior="); pw.println(mLongPressOnHomeBehavior);
         pw.print(prefix); pw.print("mLandscapeRotation="); pw.print(mLandscapeRotation);
                 pw.print(" mSeascapeRotation="); pw.println(mSeascapeRotation);

@@ -1791,6 +1791,21 @@ public class PackageManagerService extends IPackageManager.Stub {
                 mSettings.readDefaultPreferredAppsLPw(this, 0);
             }
 
+            // Disable components marked for disabling at build-time
+            for (String name : mContext.getResources().getStringArray(
+                    com.android.internal.R.array.config_disabledComponents)) {
+                ComponentName cn = ComponentName.unflattenFromString(name);
+                Slog.v(TAG, "Disabling " + name);
+                String className = cn.getClassName();
+                PackageSetting pkgSetting = mSettings.mPackages.get(cn.getPackageName());
+                if (pkgSetting == null || pkgSetting.pkg == null
+                        || !pkgSetting.pkg.hasComponentClassName(className)) {
+                    Slog.w(TAG, "Unable to disable " + name);
+                    continue;
+                }
+                pkgSetting.disableComponentLPw(className, UserHandle.USER_OWNER);
+            }
+
             // If this is first boot after an OTA, and a normal boot, then
             // we need to clear code cache directories.
             if (!Build.FINGERPRINT.equals(mSettings.mFingerprint) && !onlyCore) {
@@ -2900,6 +2915,38 @@ public class PackageManagerService extends IPackageManager.Stub {
             }
             return PackageManager.SIGNATURE_MATCH;
         }
+        return PackageManager.SIGNATURE_NO_MATCH;
+    }
+
+    private boolean isRecoverSignatureUpdateNeeded(PackageParser.Package scannedPkg) {
+        if (isExternal(scannedPkg)) {
+            return mSettings.isExternalDatabaseVersionOlderThan(
+                    DatabaseVersion.SIGNATURE_MALFORMED_RECOVER);
+        } else {
+            return mSettings.isInternalDatabaseVersionOlderThan(
+                    DatabaseVersion.SIGNATURE_MALFORMED_RECOVER);
+        }
+    }
+
+    private int compareSignaturesRecover(PackageSignatures existingSigs,
+            PackageParser.Package scannedPkg) {
+        if (!isRecoverSignatureUpdateNeeded(scannedPkg)) {
+            return PackageManager.SIGNATURE_NO_MATCH;
+        }
+
+        String msg = null;
+        try {
+            if (Signature.areEffectiveMatch(existingSigs.mSignatures, scannedPkg.mSignatures)) {
+                logCriticalInfo(Log.INFO, "Recovered effectively matching certificates for "
+                        + scannedPkg.packageName);
+                return PackageManager.SIGNATURE_MATCH;
+            }
+        } catch (CertificateException e) {
+            msg = e.getMessage();
+        }
+
+        logCriticalInfo(Log.INFO,
+                "Failed to recover certificates for " + scannedPkg.packageName + ": " + msg);
         return PackageManager.SIGNATURE_NO_MATCH;
     }
 
@@ -4191,7 +4238,8 @@ public class PackageManagerService extends IPackageManager.Stub {
         if (ps != null
                 && ps.codePath.equals(srcFile)
                 && ps.timeStamp == srcFile.lastModified()
-                && !isCompatSignatureUpdateNeeded(pkg)) {
+                && !isCompatSignatureUpdateNeeded(pkg)
+                && !isRecoverSignatureUpdateNeeded(pkg)) {
             long mSigningKeySetId = ps.keySetData.getProperSigningKeySet();
             if (ps.signatures.mSignatures != null
                     && ps.signatures.mSignatures.length != 0
@@ -4466,6 +4514,10 @@ public class PackageManagerService extends IPackageManager.Stub {
                         == PackageManager.SIGNATURE_MATCH;
             }
             if (!match) {
+                match = compareSignaturesRecover(pkgSetting.signatures, pkg)
+                        == PackageManager.SIGNATURE_MATCH;
+            }
+            if (!match) {
                 throw new PackageManagerException(INSTALL_FAILED_UPDATE_INCOMPATIBLE, "Package "
                         + pkg.packageName + " signatures do not match the "
                         + "previously installed version; ignoring!");
@@ -4479,6 +4531,10 @@ public class PackageManagerService extends IPackageManager.Stub {
                     pkg.mSignatures) == PackageManager.SIGNATURE_MATCH;
             if (!match) {
                 match = compareSignaturesCompat(pkgSetting.sharedUser.signatures, pkg)
+                        == PackageManager.SIGNATURE_MATCH;
+            }
+            if (!match) {
+                match = compareSignaturesRecover(pkgSetting.sharedUser.signatures, pkg)
                         == PackageManager.SIGNATURE_MATCH;
             }
             if (!match) {
@@ -5429,6 +5485,9 @@ public class PackageManagerService extends IPackageManager.Stub {
             if (!pkgSetting.keySetData.isUsingUpgradeKeySets() || pkgSetting.sharedUser != null) {
                 try {
                     verifySignaturesLP(pkgSetting, pkg);
+                    // We just determined the app is signed correctly, so bring
+                    // over the latest parsed certs.
+                    pkgSetting.signatures.mSignatures = pkg.mSignatures;
                 } catch (PackageManagerException e) {
                     if ((parseFlags & PackageParser.PARSE_IS_SYSTEM_DIR) == 0) {
                         throw e;
@@ -5461,7 +5520,8 @@ public class PackageManagerService extends IPackageManager.Stub {
                             + pkg.packageName + " upgrade keys do not match the "
                             + "previously installed version");
                 } else {
-                    // signatures may have changed as result of upgrade
+                    // We just determined the app is signed correctly, so bring
+                    // over the latest parsed certs.
                     pkgSetting.signatures.mSignatures = pkg.mSignatures;
                 }
             }
@@ -7987,8 +8047,18 @@ public class PackageManagerService extends IPackageManager.Stub {
         final File originFile = new File(originPath);
         final OriginInfo origin = OriginInfo.fromUntrustedFile(originFile);
 
+        final int userFilteredFlags;
+        if (getInstallLocation() == PackageHelper.APP_INSTALL_INTERNAL) {
+            Slog.w(TAG, "PackageManager.INSTALL_INTERNAL"  );
+            userFilteredFlags = installFlags | PackageManager.INSTALL_INTERNAL;
+        } else if (getInstallLocation() == PackageHelper.APP_INSTALL_EXTERNAL) {
+            Slog.w(TAG, "PackageManager.INSTALL_EXTERNAL"  );
+            userFilteredFlags = installFlags | PackageManager.INSTALL_EXTERNAL;
+        } else{
+            userFilteredFlags = installFlags;
+        }
         final Message msg = mHandler.obtainMessage(INIT_COPY);
-        msg.obj = new InstallParams(origin, observer, installFlags,
+        msg.obj = new InstallParams(origin, observer, userFilteredFlags,
                 installerPackageName, verificationParams, user, packageAbiOverride);
         mHandler.sendMessage(msg);
     }

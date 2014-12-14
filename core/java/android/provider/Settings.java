@@ -3108,6 +3108,9 @@ public final class Settings {
 
         /**
          * Status bar battery %
+         * 0: Hide the battery percentage
+         * 1: Display the battery percentage inside the icon
+         * 2: Display the battery percentage next to the icon
          * @hide
          */
         public static final String STATUS_BAR_SHOW_BATTERY_PERCENT = "status_bar_show_battery_percent";
@@ -6419,13 +6422,6 @@ public final class Settings {
         */
        public static final String WIFI_SCAN_ALWAYS_AVAILABLE =
                 "wifi_scan_always_enabled";
-
-       /**
-        * Setting to allow enable or disable rssi threshold.
-        * @hide
-        */
-       public static final String WIFI_RSSI_THRESHOLD =
-                "wifi_rssi_threshold";
 
        /**
         * Used to save the Wifi_ON state prior to tethering.
